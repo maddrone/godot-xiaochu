@@ -1,0 +1,70 @@
+[
+  {
+    "id": 1,
+    "name": "初次相遇",
+    "moves": 30,
+    "gem_types": 5,
+    "objectives": [
+      {"type": "SCORE", "target": 1000}
+    ],
+    "star_thresholds": [1000, 2000, 3500],
+    "board_layout": null,
+    "special_rules": [],
+    "bg_theme": "meadow"
+  },
+  {
+    "id": 2,
+    "name": "连击初体验",
+    "moves": 25,
+    "gem_types": 5,
+    "objectives": [
+      {"type": "SCORE", "target": 2000},
+      {"type": "COMBO_REACH", "target": 3}
+    ],
+    "star_thresholds": [2000, 3500, 5000],
+    "board_layout": null,
+    "special_rules": [],
+    "bg_theme": "meadow"
+  },
+  {
+    "id": 3,
+    "name": "色彩收集",
+    "moves": 28,
+    "gem_types": 6,
+    "objectives": [
+      {"type": "COLLECT_GEM", "gem_type": "RED", "target": 20},
+      {"type": "COLLECT_GEM", "gem_type": "BLUE", "target": 20}
+    ],
+    "star_thresholds": [2500, 4000, 6000],
+    "board_layout": null,
+    "special_rules": [],
+    "bg_theme": "forest"
+  },
+  {
+    "id": 4,
+    "name": "炸弹派对",
+    "moves": 22,
+    "gem_types": 6,
+    "objectives": [
+      {"type": "SCORE", "target": 5000}
+    ],
+    "star_thresholds": [5000, 8000, 12000],
+    "board_layout": null,
+    "special_rules": ["more_specials"],
+    "bg_theme": "volcano"
+  },
+  {
+    "id": 5,
+    "name": "极限挑战",
+    "moves": 20,
+    "gem_types": 6,
+    "objectives": [
+      {"type": "SCORE", "target": 8000},
+      {"type": "COMBO_REACH", "target": 5}
+    ],
+    "star_thresholds": [8000, 12000, 18000],
+    "board_layout": null,
+    "special_rules": ["more_specials"],
+    "bg_theme": "space"
+  }
+]
