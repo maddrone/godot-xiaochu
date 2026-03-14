@@ -80,9 +80,23 @@ func _draw() -> void:
 		color = GEM_COLORS[gem_type]
 		shape_id = GEM_SHAPES[gem_type]
 	else:
-		# 特殊宝石
-		color = Color.white
-		shape_id = 0
+		# 特殊宝石 — 独特颜色和形状
+		match gem_type:
+			GameManager.GemType.STRIPED_H:
+				color = Color("ffee58")  # 亮黄
+				shape_id = 3
+			GameManager.GemType.STRIPED_V:
+				color = Color("ffee58")
+				shape_id = 3
+			GameManager.GemType.BOMB:
+				color = Color("ff6644")  # 橙红
+				shape_id = 0
+			GameManager.GemType.RAINBOW:
+				color = Color("e0e0e0")  # 亮白
+				shape_id = 4
+			_:
+				color = Color.white
+				shape_id = 0
 
 	# 绘制阴影（偏移2像素）
 	var shadow_color := Color(0, 0, 0, 0.3)
@@ -94,6 +108,18 @@ func _draw() -> void:
 	# 绘制高光（内部更亮的小形状）
 	var highlight := color.lightened(0.35)
 	_draw_gem_shape(Vector2(-3, -3), GEM_INNER_RADIUS * 0.6, highlight, shape_id)
+
+	# 特殊宝石额外标记
+	if gem_type == GameManager.GemType.STRIPED_H:
+		# 横线标记
+		draw_line(Vector2(-GEM_RADIUS + 6, 0), Vector2(GEM_RADIUS - 6, 0), Color(1,1,1,0.8), 3.0)
+	elif gem_type == GameManager.GemType.STRIPED_V:
+		# 竖线标记
+		draw_line(Vector2(0, -GEM_RADIUS + 6), Vector2(0, GEM_RADIUS - 6), Color(1,1,1,0.8), 3.0)
+	elif gem_type == GameManager.GemType.BOMB:
+		# 十字标记
+		draw_line(Vector2(-8, -8), Vector2(8, 8), Color(1,1,1,0.7), 2.0)
+		draw_line(Vector2(8, -8), Vector2(-8, 8), Color(1,1,1,0.7), 2.0)
 
 	# 选中指示器
 	if is_selected:

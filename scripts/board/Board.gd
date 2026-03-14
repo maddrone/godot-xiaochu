@@ -82,7 +82,7 @@ func _resolve_initial_matches() -> void:
 					while new_type == old_type or _would_match(col, row, new_type):
 						new_type = randi() % gem_count
 					grid[col][row].gem_type = new_type
-					grid[col][row]._update_visual()
+					grid[col][row].update()  # 触发 _draw() 重绘
 					changed = true
 
 	if max_iterations <= 0:
@@ -598,9 +598,9 @@ func _collapse_and_refill() -> void:
 			max_fall_delay = max(max_fall_delay, delay)
 			new_gem_count += 1
 
-	# 等待所有下落动画完成
+	# 等待所有下落动画完成（FALL_DURATION = 0.22）
 	yield(get_tree().create_timer(
-		max_fall_delay + gem_scene.instance().FALL_DURATION + 0.1
+		max_fall_delay + 0.32
 	), "timeout")
 
 
