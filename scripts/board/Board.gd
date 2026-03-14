@@ -11,10 +11,14 @@ extends Node2D
 
 # ── 子节点引用 ────────────────────────────────────────────
 onready var gems_container: Node2D = $GemsContainer
+onready var effects_container: Node2D = $EffectsContainer
 onready var tween: Tween = $Tween
 
-# ── 宝石场景 ──────────────────────────────────────────────
+# ── 场景预加载 ────────────────────────────────────────────
 var gem_scene: PackedScene = preload("res://scenes/gem/Gem.tscn")
+var MatchEffect := preload("res://scripts/effects/MatchEffect.gd")
+var ComboDisplay := preload("res://scripts/effects/ComboDisplay.gd")
+var ScorePopup := preload("res://scripts/effects/ScorePopup.gd")
 
 # ── 棋盘数据（2D 数组，存储 Gem 节点引用） ───────────────
 # grid[col][row] = Gem node or null
@@ -404,6 +408,51 @@ func _process_matches(matches: Array) -> void:
 				"is_horizontal": match_data["is_horizontal"]
 			})
 
+		# ── 特殊宝石生成逻辑 ─────────────────────────────
+		# 4连 → 条纹宝石，5连 → 彩虹宝石
+		# T/L形交叉 → 炸弹宝石
+		var special_gems_to_create := []  # [{col, row, type}]
+		for match_data in matches:
+			var length: int = match_data["length"]
+			var gems_list: Array = match_data["gems"]
+			var is_h: bool = match_data["is_horizontal"]
+
+			if length >= 5:
+				# 5连以上 → 彩虹宝石（生成在中间位置）
+				var mid = gems_list[length / 2]
+				special_gems_to_create.append({
+					"col": mid.grid_col,
+					"row": mid.grid_row,
+					"type": GameManager.GemType.RAINBOW
+				})
+			elif length == 4:
+				# 4连 → 条纹宝石（方向与匹配方向垂直）
+				var mid = gems_list[1]  # 第二个位置
+				var stripe_type = GameManager.GemType.STRIPED_V if is_h else GameManager.GemType.STRIPED_H
+				special_gems_to_create.append({
+					"col": mid.grid_col,
+					"row": mid.grid_row,
+					"type": stripe_type
+				})
+
+		# 检测 T/L 形交叉（两个匹配共享一个宝石 → 炸弹）
+		for i in range(matches.size()):
+			for j in range(i + 1, matches.size()):
+				var shared := _find_shared_gem(matches[i]["gems"], matches[j]["gems"])
+				if shared != null:
+					# 交叉点生成炸弹
+					var already_special := false
+					for s in special_gems_to_create:
+						if s["col"] == shared.grid_col and s["row"] == shared.grid_row:
+							already_special = true
+							break
+					if not already_special:
+						special_gems_to_create.append({
+							"col": shared.grid_col,
+							"row": shared.grid_row,
+							"type": GameManager.GemType.BOMB
+						})
+
 		# 收集所有需要消除的宝石（去重）
 		var gems_to_eliminate := {}
 		for match_data in matches:
@@ -411,18 +460,90 @@ func _process_matches(matches: Array) -> void:
 				var key := "%d_%d" % [gem.grid_col, gem.grid_row]
 				gems_to_eliminate[key] = gem
 
-		# 播放消除动画
-		var delay_step := 0.03  # 每个宝石间的延迟（连锁感）
-		var i := 0
+		# 从消除列表中移除将变成特殊宝石的位置
+		for special in special_gems_to_create:
+			var key := "%d_%d" % [special["col"], special["row"]]
+			gems_to_eliminate.erase(key)
+
+		# 检查消除列表中是否有特殊宝石，触发其效果
+		var special_keys := []
 		for key in gems_to_eliminate:
 			var gem = gems_to_eliminate[key]
+			if gem.is_special:
+				special_keys.append(key)
+		for key in special_keys:
+			var gem = gems_to_eliminate[key]
+			_trigger_special_gem(gem, gems_to_eliminate)
+
+		# 播放消除动画 + 粒子特效
+		var delay_step := 0.03
+		var i := 0
+		var combo := GameManager.combo_count
+		for key in gems_to_eliminate:
+			var gem = gems_to_eliminate[key]
+			var gem_pos := gem.position
+			var gem_color: Color = Color.white
+			if gem.gem_type >= 0 and gem.gem_type < gem.GEM_COLORS.size():
+				gem_color = gem.GEM_COLORS[gem.gem_type]
+
 			grid[gem.grid_col][gem.grid_row] = null
 			gem.eliminate(i * delay_step)
+
+			# 生成粒子爆炸效果
+			var effect = Node2D.new()
+			effect.set_script(MatchEffect)
+			effects_container.add_child(effect)
+			effect.create_burst(gem_pos, gem_color, combo)
+
+			# 分数飘字（每3个宝石显示一次，避免太密集）
+			if i % 3 == 0:
+				var popup = Node2D.new()
+				popup.set_script(ScorePopup)
+				effects_container.add_child(popup)
+				var score_per_gem := int(10 * total_gems * GameManager.get_combo_multiplier() / max(total_gems, 1))
+				popup.show_score(score_per_gem, gem_pos, gem_color.lightened(0.3))
+
 			i += 1
+
+		# 连击飘字
+		if combo >= 2:
+			var combo_display = Node2D.new()
+			combo_display.set_script(ComboDisplay)
+			effects_container.add_child(combo_display)
+			var center := GameManager.grid_to_pixel(
+				GameManager.BOARD_COLS / 2, GameManager.BOARD_ROWS / 2
+			)
+			combo_display.show_combo(combo, center + Vector2(0, -100))
+
+		# 创建特殊宝石（在消除动画播放时）
+		for special in special_gems_to_create:
+			var old_gem = grid[special["col"]][special["row"]]
+			if old_gem != null:
+				old_gem.queue_free()
+			var new_gem := _create_gem(special["type"], special["col"], special["row"])
+			new_gem.is_special = true
+			new_gem.update()
+			# 特殊宝石出场动画
+			new_gem.scale = Vector2.ZERO
+			var st := Tween.new()
+			new_gem.add_child(st)
+			st.interpolate_property(
+				new_gem, "scale",
+				Vector2.ZERO, Vector2.ONE * 1.3,
+				0.2, Tween.TRANS_BACK, Tween.EASE_OUT
+			)
+			st.interpolate_property(
+				new_gem, "scale",
+				Vector2.ONE * 1.3, Vector2.ONE,
+				0.1, Tween.TRANS_QUAD, Tween.EASE_IN,
+				0.2
+			)
+			st.start()
+			AudioManager.play_sfx("special_create")
 
 		# 等待消除动画完成
 		yield(get_tree().create_timer(
-			gems_to_eliminate.size() * delay_step + gem_scene.instance().ELIMINATE_DURATION + 0.1
+			gems_to_eliminate.size() * delay_step + 0.35
 		), "timeout")
 
 		# 下落填充
@@ -503,3 +624,73 @@ func _on_gem_selected(gem) -> void:
 	if is_processing:
 		return
 	_handle_touch(gem.position)
+
+
+# ── 特殊宝石辅助函数 ────────────────────────────────────
+func _find_shared_gem(gems_a: Array, gems_b: Array):
+	"""查找两个匹配组中共享的宝石（T/L 形检测）"""
+	for ga in gems_a:
+		for gb in gems_b:
+			if ga.grid_col == gb.grid_col and ga.grid_row == gb.grid_row:
+				return ga
+	return null
+
+
+func _trigger_special_gem(gem, gems_to_eliminate: Dictionary) -> void:
+	"""触发特殊宝石效果，将受影响的宝石加入消除列表"""
+	match gem.gem_type:
+		GameManager.GemType.STRIPED_H:
+			# 横条纹：消除整行
+			for col in range(GameManager.BOARD_COLS):
+				_add_to_eliminate(col, gem.grid_row, gems_to_eliminate)
+
+		GameManager.GemType.STRIPED_V:
+			# 竖条纹：消除整列
+			for row in range(GameManager.BOARD_ROWS):
+				_add_to_eliminate(gem.grid_col, row, gems_to_eliminate)
+
+		GameManager.GemType.BOMB:
+			# 炸弹：3x3 范围
+			for dc in range(-1, 2):
+				for dr in range(-1, 2):
+					var c := gem.grid_col + dc
+					var r := gem.grid_row + dr
+					_add_to_eliminate(c, r, gems_to_eliminate)
+
+		GameManager.GemType.RAINBOW:
+			# 彩虹：消除棋盘上随机一种颜色的所有宝石
+			var target_type := _get_most_common_type()
+			for col in range(GameManager.BOARD_COLS):
+				for row in range(GameManager.BOARD_ROWS):
+					if grid[col][row] != null and grid[col][row].gem_type == target_type:
+						_add_to_eliminate(col, row, gems_to_eliminate)
+
+	AudioManager.play_sfx("special_explode")
+
+
+func _add_to_eliminate(col: int, row: int, gems_dict: Dictionary) -> void:
+	"""安全地将一个位置的宝石加入消除列表"""
+	if not GameManager.is_valid_cell(col, row):
+		return
+	if grid[col][row] == null:
+		return
+	var key := "%d_%d" % [col, row]
+	gems_dict[key] = grid[col][row]
+
+
+func _get_most_common_type() -> int:
+	"""找出棋盘上数量最多的普通宝石类型"""
+	var counts := {}
+	for col in range(GameManager.BOARD_COLS):
+		for row in range(GameManager.BOARD_ROWS):
+			if grid[col][row] != null:
+				var t = grid[col][row].gem_type
+				if t < GameManager.NORMAL_GEM_COUNT:
+					counts[t] = counts.get(t, 0) + 1
+	var best_type := 0
+	var best_count := 0
+	for t in counts:
+		if counts[t] > best_count:
+			best_count = counts[t]
+			best_type = t
+	return best_type
