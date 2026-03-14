@@ -160,22 +160,27 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not GameManager.is_input_allowed() or is_processing:
 		return
 
+	# 将视口坐标转换为世界坐标（兼容 Camera2D 偏移/抖动）
+	var world_pos := get_canvas_transform().affine_inverse().xform(
+		event.position if event is InputEventMouseButton or event is InputEventMouseMotion else Vector2.ZERO
+	)
+
 	# 触摸/鼠标按下
 	if event is InputEventMouseButton:
 		if event.pressed:
-			touch_start_pos = event.position
+			touch_start_pos = world_pos
 			is_touching = true
-			_handle_touch(event.position)
+			_handle_touch(world_pos)
 		else:
 			if is_touching and selected_gem != null:
-				_handle_swipe(event.position)
+				_handle_swipe(world_pos)
 			is_touching = false
 
 	# 触摸/鼠标拖动（检测滑动方向）
 	if event is InputEventMouseMotion and is_touching and selected_gem != null:
-		var distance := event.position.distance_to(touch_start_pos)
+		var distance := world_pos.distance_to(touch_start_pos)
 		if distance > SWIPE_THRESHOLD:
-			_handle_swipe(event.position)
+			_handle_swipe(world_pos)
 			is_touching = false
 
 
